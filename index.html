@@ -31,6 +31,22 @@
             height: 100vh; overflow: hidden;
         }
 
+        /* REGISTRATION OVERLAY */
+        #auth-overlay {
+            position: fixed; inset: 0; background: rgba(0,0,0,0.95);
+            z-index: 2000; display: none; justify-content: center; align-items: center; padding: 20px;
+        }
+        .auth-card {
+            background: #1c1c1c; width: 100%; max-width: 350px; border-radius: 20px;
+            padding: 30px; text-align: center; border: 1px solid #333; box-shadow: 0 10px 40px rgba(0,0,0,0.8);
+        }
+        .auth-input {
+            width: 100%; padding: 12px; margin-bottom: 15px; background: #000;
+            border: 1px solid #444; color: white; border-radius: 8px; box-sizing: border-box; outline: none;
+        }
+        .auth-input:focus { border-color: var(--mpesa-green); }
+
+        /* GAME LAYOUT */
         .game-container {
             width: 100vw; height: 100vh; max-width: 400px;
             background: var(--panel-bg); display: flex; flex-direction: column;
@@ -74,13 +90,9 @@
             position: absolute; bottom: 0; left: 0; width: 60px; z-index: 25; display: none;
             margin-left: -5px; margin-bottom: -5px; 
         }
-        
-        /* Added style to make your photo look like a circular avatar in the game */
         .avatar-icon {
-            width: 100%; 
-            border-radius: 50%; 
-            border: 2px solid var(--accent-red);
-            box-shadow: 0 0 10px var(--accent-red);
+            width: 100%; height: 60px; border-radius: 50%; border: 2px solid var(--accent-red);
+            box-shadow: 0 0 15px var(--accent-red); object-fit: cover;
         }
 
         #flight-curve { position: absolute; width: 100%; height: 100%; z-index: 20; }
@@ -103,6 +115,7 @@
             flex: 1; background: #080808; margin: 0 12px 12px; border-radius: 12px;
             overflow-y: auto; padding: 12px; border: 1px solid #222;
         }
+        .player-header { color: var(--text-dim); font-size: 0.6rem; font-weight: bold; margin-bottom: 8px; text-transform: uppercase; border-bottom: 1px solid #222; padding-bottom: 5px; }
         .player-row { display: flex; justify-content: space-between; font-size: 0.75rem; padding: 6px 0; border-bottom: 1px solid #151515; }
 
         .modal {
@@ -113,6 +126,20 @@
 </head>
 <body>
 
+<div id="auth-overlay">
+    <div class="auth-card">
+        <img src="my-photo.jpg" style="width:90px; height:90px; border-radius:50%; border:3px solid var(--mpesa-green); margin-bottom:15px; object-fit: cover;">
+        <h2 style="margin:0 0 10px 0; color:white;">Aviator Pro</h2>
+        <p style="color:#888; font-size:0.85rem; margin-bottom:25px;">Enter details to sync with your M-Pesa Wallet</p>
+        
+        <input type="text" id="reg-name" class="auth-input" placeholder="Username / Nickname">
+        <input type="number" id="reg-phone" class="auth-input" placeholder="M-Pesa Phone Number">
+        
+        <button onclick="registerUser()" style="width:100%; padding:16px; background:var(--mpesa-green); border:none; color:white; border-radius:10px; font-weight:bold; font-size:1.1rem; cursor:pointer; margin-top:10px;">JOIN & PLAY</button>
+        <p style="font-size:0.65rem; color:#555; margin-top:15px;">By clicking, you confirm you are 18+ years old.</p>
+    </div>
+</div>
+
 <div id="toast">Message</div>
 
 <div class="game-container">
@@ -120,7 +147,7 @@
 
     <div class="header">
         <div>
-            <div style="font-size: 0.5rem; color: var(--text-dim); letter-spacing: 1px;">WALLET BALANCE</div>
+            <div id="user-display" style="font-size: 0.55rem; color: var(--text-dim); letter-spacing: 1px; text-transform: uppercase;">WALLET BALANCE</div>
             <div id="balance-amount" style="color:var(--success-green); font-weight:800; font-size: 1.1rem;">KES 1,000.00</div>
         </div>
         <div style="display:flex; gap:8px;">
@@ -156,7 +183,11 @@
             <button id="btn-2" class="bet-btn" onclick="handleBetAction(2)" style="background:var(--success-green);">BET</button>
         </div>
     </div>
-    <div class="players-box" id="player-feed"></div>
+    
+    <div class="players-box" id="player-feed">
+        <div class="player-header">LIVE BETS</div>
+        <div id="bet-list"></div>
+    </div>
 </div>
 
 <div id="mpesa-modal" class="modal">
@@ -168,14 +199,82 @@
 </div>
 
 <script>
-    // [Script remains exactly as provided in your original code]
     let balance = 1000.00;
     let multiplier = 1.00;
     let isFlying = false;
-    let history = ["1.25", "4.50", "1.10", "2.80", "15.20", "1.02"];
+    let history = ["1.25", "4.50", "1.10", "2.80", "1.02"];
     let bets = { 1: { state: 'none', amount: 0 }, 2: { state: 'none', amount: 0 } };
-    let fakePlayers = [];
+    let livePlayers = [];
 
+    const namesPool = ["Kioko_KE", "Mama_Wahu", "Nairobi_Ace", "Otieno_Win", "Shiko_254", "Pilot_Mike", "Hustler_01", "Lucky_Bee", "Joe_Mpesa", "Captain_K"];
+
+    // --- REGISTRATION & AUTH ---
+    function checkAuth() {
+        const savedUser = localStorage.getItem('aviator_pro_user');
+        if (!savedUser) {
+            document.getElementById('auth-overlay').style.display = 'flex';
+        } else {
+            const user = JSON.parse(savedUser);
+            setupGameForUser(user.name);
+        }
+    }
+
+    function registerUser() {
+        const name = document.getElementById('reg-name').value;
+        const phone = document.getElementById('reg-phone').value;
+        if (name.length < 2 || phone.length < 10) {
+            showToast("Please enter a valid Name & Phone", false);
+            return;
+        }
+        localStorage.setItem('aviator_pro_user', JSON.stringify({name, phone}));
+        document.getElementById('auth-overlay').style.display = 'none';
+        setupGameForUser(name);
+        showToast("Welcome to Aviator Pro!");
+    }
+
+    function setupGameForUser(name) {
+        document.getElementById('user-display').innerText = name + "'S BALANCE";
+        startCooldown();
+    }
+
+    // --- LIVE PLAYER LOGIC ---
+    function generatePlayers() {
+        livePlayers = [];
+        const count = 4 + Math.floor(Math.random() * 6);
+        for(let i=0; i<count; i++) {
+            livePlayers.push({
+                name: namesPool[Math.floor(Math.random() * namesPool.length)],
+                bet: (Math.random() * 800 + 50).toFixed(0),
+                cashOutAt: (Math.random() * 3.8 + 1.05).toFixed(2),
+                cashed: false
+            });
+        }
+        renderPlayers();
+    }
+
+    function renderPlayers() {
+        const list = document.getElementById('bet-list');
+        list.innerHTML = livePlayers.map(p => `
+            <div class="player-row">
+                <span>${p.name} <small style="color:#444">Ksh ${p.bet}</small></span>
+                <span>${p.cashed ? '<b style="color:var(--success-green)">' + p.actual + 'x</b>' : '...'}</span>
+            </div>
+        `).join('');
+    }
+
+    function updatePlayers(m) {
+        let changed = false;
+        livePlayers.forEach(p => {
+            if (!p.cashed && m >= p.cashOutAt) {
+                p.cashed = true;
+                p.actual = m.toFixed(2);
+                changed = true;
+            }
+        });
+        if (changed) renderPlayers();
+    }
+
+    // --- GAME ENGINE ---
     function showToast(msg, success = true) {
         const t = document.getElementById('toast');
         t.innerText = msg;
@@ -195,7 +294,7 @@
 
         if (bets[id].state === 'none') {
             if (amt > balance || amt < 10) {
-                showToast("Invalid Amount or Insufficient Balance", false);
+                showToast("Invalid Amount", false);
                 return;
             }
             balance -= amt;
@@ -216,15 +315,16 @@
             balance += win;
             bets[id].state = 'cashed';
             btn.innerText = "WON!";
-            btn.style.background = "#444";
+            btn.style.background = "#333";
             btn.style.color = "var(--success-green)";
-            showToast(`CASHOUT SUCCESS: KES ${win.toFixed(2)}`);
+            showToast(`CASHOUT: KES ${win.toFixed(2)}`);
             updateBalanceUI();
         }
     }
 
     function startCooldown() {
         isFlying = false;
+        generatePlayers();
         document.getElementById('multiplier').style.display = 'none';
         document.getElementById('plane-wrapper').style.display = 'none';
         document.getElementById('curve-path').setAttribute('d', '');
@@ -245,11 +345,12 @@
         isFlying = true;
         multiplier = 1.00;
         const crashPoint = (Math.random() * 5 + 1.01).toFixed(2);
+        
         document.getElementById('next-round-timer').style.display = 'none';
         document.getElementById('multiplier').style.display = 'block';
         document.getElementById('multiplier').style.color = 'white';
         document.getElementById('plane-wrapper').style.display = 'block';
-        initFakePlayers();
+        
         [1, 2].forEach(id => {
             if (bets[id].state === 'waiting') {
                 bets[id].state = 'active';
@@ -258,29 +359,37 @@
                 btn.style.color = "black";
             }
         });
+
         const flightInterval = setInterval(() => {
             multiplier += 0.01;
-            document.getElementById('multiplier').innerText = multiplier.toFixed(2) + "x";
+            const mText = multiplier.toFixed(2);
+            document.getElementById('multiplier').innerText = mText + "x";
+
+            updatePlayers(multiplier);
+
             [1, 2].forEach(id => {
                 if (bets[id].state === 'active') {
                     document.getElementById(`btn-${id}`).innerText = "CASH " + (bets[id].amount * multiplier).toFixed(1);
                 }
             });
+
             const progress = multiplier - 1;
             const x = Math.min(progress * 85, 350);
             const y = Math.min(Math.pow(progress * 38, 1.25), 250);
             document.getElementById('plane-wrapper').style.left = x + "px";
             document.getElementById('plane-wrapper').style.bottom = y + "px";
             document.getElementById('curve-path').setAttribute('d', `M 0 300 Q ${x * 0.4} 300 ${x} ${300 - y}`);
-            updateFakePlayers(multiplier);
+
             if (multiplier >= crashPoint) {
                 clearInterval(flightInterval);
                 document.getElementById('curve-path').setAttribute('d', ''); 
                 document.getElementById('multiplier').innerText = "FLEW AWAY!";
                 document.getElementById('multiplier').style.color = "var(--accent-red)";
-                history.unshift(multiplier.toFixed(2));
-                if (history.length > 12) history.pop();
+                
+                history.unshift(mText);
+                if (history.length > 10) history.pop();
                 renderHistory();
+                
                 [1,2].forEach(id => {
                     const btn = document.getElementById(`btn-${id}`);
                     btn.innerText = "BET";
@@ -288,46 +397,34 @@
                     btn.style.color = "white";
                     bets[id] = { state: 'none', amount: 0 };
                 });
+
                 setTimeout(startCooldown, 2000);
             }
         }, 60);
     }
 
-    function initFakePlayers() {
-        const names = ["Pilot_254", "Lucky_J", "Mpesa_King", "Shan_Aviator", "BigWin_KE", "User99", "Captain_Tosh"];
-        fakePlayers = names.map(n => ({ name: n, cashout: (Math.random() * 4 + 1.1), isCashed: false, lost: Math.random() < 0.25 }));
-        renderPlayers();
-    }
-    function updateFakePlayers(m) {
-        let changed = false;
-        fakePlayers.forEach(p => { if (!p.isCashed && !p.lost && m >= p.cashout) { p.isCashed = true; p.final = m.toFixed(2); changed = true; } });
-        if (changed) renderPlayers();
-    }
-    function renderPlayers() {
-        const container = document.getElementById('player-feed');
-        container.innerHTML = '<div style="color:var(--text-dim); font-size:0.5rem; margin-bottom:5px; font-weight:bold;">LIVE BETS</div>';
-        fakePlayers.forEach(p => {
-            const val = p.isCashed ? `<span style="color:var(--success-green)">${p.final}x</span>` : `<span style="color:#444">...</span>`;
-            container.innerHTML += `<div class="player-row"><span>${p.name}</span>${val}</div>`;
-        });
-    }
     function renderHistory() {
         const h = document.getElementById('history-list');
         h.innerHTML = history.map(v => `<span class="hist-val" style="color:${v > 2 ? 'var(--accent-gold)' : '#fff'}">${v}x</span>`).join('');
     }
+
     function triggerMpesaPush() { document.getElementById('mpesa-modal').style.display = 'flex'; }
     function confirmDeposit() {
-        balance += 500; updateBalanceUI();
+        balance += 500;
+        updateBalanceUI();
         document.getElementById('mpesa-modal').style.display = 'none';
-        showToast("M-PESA: KES 500 deposited to your account succesful.");
+        showToast("M-PESA: KES 500 received to your Aviator account.");
     }
     function triggerWithdraw() {
         if (balance < 50) return showToast("Minimum withdrawal is KES 50", false);
-        showToast(`KES ${balance.toFixed(2)} withdrawn to M-Pesa +254757080224.`);
-        balance = 0; updateBalanceUI();
+        showToast(`KES ${balance.toFixed(2)} sent to your M-Pesa account succesfully.`);
+        balance = 0;
+        updateBalanceUI();
     }
+
     renderHistory();
-    startCooldown();
+    checkAuth();
 </script>
 </body>
-</html>
+    </html>
+    
